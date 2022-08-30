@@ -12,12 +12,14 @@ contract Actuary is Owned {
                             ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    error CertificateInactive();
+    error CertificateNotInactive();
     error CertificateActive();
     error CertificateNotExpired();
     error CertificateExpired();
     error CertificateNotClaimed();
     error CertificateClaimed();
+
+    error NotOwner();
 
     /*///////////////////////////////////////////////////////////////
                             EVENTS
@@ -26,11 +28,21 @@ contract Actuary is Owned {
     event NewAdmin(address _previousAdmin, address _newAdmin);
     event NewInsurancePool(address _insurancePool);
     event NewAdjuster(address _adjuster);
-    event InsurancePurchaced(uint256 id);
-    event InsuranceActivated(uint256 id);
-    event InsuranceClaimed(uint256 id);
-    event InsuranceExpired(uint256 id);
-    event InsuranceCanceled(uint256 id);
+    event InsurancePurchaced(
+        uint256 id,
+        uint256 premiumPaid,
+        uint256 usdEscrowed,
+        uint256 startTime,
+        uint256 endTime
+    );
+    event InsuranceActivated(uint256 id, uint256 startTime, uint256 endTime);
+    event InsuranceClaimed(uint256 id, uint256 usdClaimed);
+    event InsuranceExpired(
+        uint256 id,
+        uint256 usdEscrowedRefunded,
+        uint256 usdClaimableByExits
+    );
+    event InsuranceCanceled(uint256 id, uint256 EscrowedRefunded);
 
     /*///////////////////////////////////////////////////////////////
                             STORAGE
@@ -44,6 +56,13 @@ contract Actuary is Owned {
     Adjuster public adjuster;
     /// @dev The certificate
     Certificate public certificate;
+
+    // TODO: implement hook on Vault & Certificate such that when LP withdraws
+    /// @dev
+    mapping(uint256 => mapping(address => uint256)) escorowClaims;
+    /// @dev total escorow claims for each certificate
+    mapping(uint256 => uint256) totalEscrowedClaims;
+
     /// @dev The payment token
     ERC20 public usd;
 
@@ -69,7 +88,7 @@ contract Actuary is Owned {
                             VIEW ACTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function getQuote(uint256 _coverAmount) public view returns (uint256) {
+    function getQuote(uint256 _coverAmount) public pure returns (uint256) {
         // TESTING: 1% of cover amount
         return _coverAmount / 100;
     }
@@ -79,21 +98,17 @@ contract Actuary is Owned {
     //////////////////////////////////////////////////////////////*/
 
     function purchaseInsurance(
-        address _insuree,
         uint256 _coverAmount,
         uint256 _startTime,
         uint256 _endTime
     ) external {
-        // Get the quote
+        // 1. Get the quote
         uint256 quote = getQuote(_coverAmount);
 
-        // Transfer the premium to the pool
+        // 2. Transfer the premium to the pool
         usd.transferFrom(msg.sender, address(this), quote);
 
-        // withdraw cover amount from the pool as escrow
-        pool.escrow(_coverAmount);
-
-        // Create the certificate
+        // 3. Create the Insurance Certificate
         uint256 certificateId = certificate.mintTo(
             msg.sender,
             quote,
@@ -102,14 +117,51 @@ contract Actuary is Owned {
             _endTime
         );
 
-        // TODO: in test check snapshotId == certificateId
-        uint256 snapshotId = pool.snapshot();
+        // 4. Set the status of the Insurance Certificate
+        certificate.setStatus(certificateId, Certificate.Status.INACTIVE);
 
-        // Emit the event
-        emit InsurancePurchaced(certificateId);
+        // TODO: in test check snapshotId == certificateId
+        pool.snapshot();
+
+        // 5. Withdraw cover amount from the pool as escrow
+        pool.escrow(_coverAmount);
+
+        // 6. Emit the event
+        emit InsurancePurchaced(
+            certificateId,
+            quote,
+            _coverAmount,
+            _startTime,
+            _endTime
+        );
     }
 
     // insuree cancels certificate
+    function cancelInsurance(uint256 _certificateId) external {
+        // 1. Check msg.sender is owner
+        if (certificate.ownerOf(_certificateId) != msg.sender) {
+            revert NotOwner();
+        }
+
+        // 2. Check if the certificate is active
+        if (
+            certificate.getStatus(_certificateId) != Certificate.Status.INACTIVE
+        ) {
+            revert CertificateNotInactive();
+        }
+
+        // 3. Cancel Insurance Certificate
+        certificate.setStatus(_certificateId, Certificate.Status.CANCELED);
+
+        // 4. Repay escrow
+        usd.transfer(address(this), certificate.getEscrowed(_certificateId));
+
+        // 5. Emit the event
+        emit InsuranceCanceled(
+            _certificateId,
+            certificate.getEscrowed(_certificateId)
+        );
+    }
 
     // insuree claims against certificate
 

@@ -56,6 +56,28 @@ contract Certificate is ERC721 {
     }
 
     /* ====================================================================== //
+                                    VIEW FUNCTIONS
+    // ====================================================================== */
+
+    function getStatus(uint256 _tokenId) public view returns (Status) {
+        return status[_tokenId];
+    }
+
+    function getEscrowed(uint256 _tokenId) public view returns (uint256) {
+        return escrowed[_tokenId];
+    }
+
+    function tokenURI(uint256 id)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
+        return Strings.toString(id);
+    }
+
+    /* ====================================================================== //
                                     PROTOCOL ACTIONS
     /* ====================================================================== */
 
@@ -65,7 +87,7 @@ contract Certificate is ERC721 {
         uint256 _escrowed,
         uint256 _startTime,
         uint256 _endTime
-    ) public payable returns (uint256) {
+    ) external payable returns (uint256) {
         if (msg.sender != address(actuary)) revert OnlyActuary();
 
         uint256 newItemId = ++currentTokenId;
@@ -81,13 +103,9 @@ contract Certificate is ERC721 {
         return newItemId;
     }
 
-    function tokenURI(uint256 id)
-        public
-        view
-        virtual
-        override
-        returns (string memory)
-    {
-        return Strings.toString(id);
+    function setStatus(uint256 _tokenId, Status _status) external {
+        if (msg.sender != address(actuary)) revert OnlyActuary();
+        // TODO: perform checks
+        status[_tokenId] = _status;
     }
 }
