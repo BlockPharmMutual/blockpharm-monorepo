@@ -5,11 +5,19 @@ import {Owned} from "solmate/auth/Owned.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {InsurancePool} from "./InsurancePool.sol";
 import {Adjuster} from "./Adjuster.sol";
+import {Certificate} from "./Certificate.sol";
 
-contract Actuary {
+contract Actuary is Owned {
     /*///////////////////////////////////////////////////////////////
                             ERRORS
     //////////////////////////////////////////////////////////////*/
+
+    error CertificateInactive();
+    error CertificateActive();
+    error CertificateNotExpired();
+    error CertificateExpired();
+    error CertificateNotClaimed();
+    error CertificateClaimed();
 
     /*///////////////////////////////////////////////////////////////
                             EVENTS
@@ -18,34 +26,11 @@ contract Actuary {
     event NewAdmin(address _previousAdmin, address _newAdmin);
     event NewInsurancePool(address _insurancePool);
     event NewAdjuster(address _adjuster);
-    event InsurancePurchaced(uint256 id, Certificates _certificate);
-    event InsuranceActivated(uint256 id, Certificates _certificate);
-    event InsuranceClaimed(uint256 id, Certificates _certificate);
-    event InsuranceExpired(uint256 id, Certificates _certificate);
-    event InsuranceCanceled(uint256 id, Certificates _certificate);
-
-    /*///////////////////////////////////////////////////////////////
-                            Custom Types
-    //////////////////////////////////////////////////////////////*/
-
-    enum Status {
-        INACTIVE,
-        ACTIVE,
-        CLAIMED,
-        EXPIRED,
-        CANCELED
-    }
-
-    struct Certificate {
-        address insuree;
-        uint256 premium;
-        uint256 escrowed;
-        mapping(address => uint256) guarantors;
-        mapping(address => uint256) guarantorExits;
-        uint256 totalExits;
-        uint256 startTime;
-        uint256 endTime;
-    }
+    event InsurancePurchaced(uint256 id);
+    event InsuranceActivated(uint256 id);
+    event InsuranceClaimed(uint256 id);
+    event InsuranceExpired(uint256 id);
+    event InsuranceCanceled(uint256 id);
 
     /*///////////////////////////////////////////////////////////////
                             STORAGE
@@ -53,16 +38,14 @@ contract Actuary {
 
     /// @dev The address of the admin
     address public admin;
-    /// @dev The address of the insurance pool
+    /// @dev The insurance pool
     InsurancePool public pool;
-    /// @dev The address of the adjuster
+    /// @dev The adjuster
     Adjuster public adjuster;
+    /// @dev The certificate
+    Certificate public certificate;
     /// @dev The payment token
     ERC20 public usd;
-    /// @dev The id of the last claim
-    uint256 public id;
-    /// @dev A mapping of all the certificates
-    mapping(uint256 => Certificate) public certificates;
 
     /*///////////////////////////////////////////////////////////////
                             INITIALIZATION
@@ -72,22 +55,66 @@ contract Actuary {
         address _admin,
         address _pool,
         address _adjuster,
+        address _certificate,
         address _usd
-    ) public {
+    ) Owned(_admin) {
         admin = _admin;
         pool = InsurancePool(_pool);
         adjuster = Adjuster(_adjuster);
+        certificate = Certificate(_certificate);
         usd = ERC20(_usd);
-        id = 0;
     }
 
     /*///////////////////////////////////////////////////////////////
                             VIEW ACTIONS
     //////////////////////////////////////////////////////////////*/
 
+    function getQuote(uint256 _coverAmount) public view returns (uint256) {
+        // TESTING: 1% of cover amount
+        return _coverAmount / 100;
+    }
+
     /*///////////////////////////////////////////////////////////////
                             MUTABLE ACTIONS
     //////////////////////////////////////////////////////////////*/
+
+    function purchaseInsurance(
+        address _insuree,
+        uint256 _coverAmount,
+        uint256 _startTime,
+        uint256 _endTime
+    ) external {
+        // Get the quote
+        uint256 quote = getQuote(_coverAmount);
+
+        // Transfer the premium to the pool
+        usd.transferFrom(msg.sender, address(this), quote);
+
+        // withdraw cover amount from the pool as escrow
+        pool.escrow(_coverAmount);
+
+        // Create the certificate
+        uint256 id = certificate.mintTo(
+            recipient,
+            _premium,
+            _escrowed,
+            _startTime,
+            _endTime
+        );
+
+        // Emit the event
+        emit InsurancePurchaced(id);
+    }
+
+    // insuree cancels certificate
+
+    // insuree claims against certificate
+
+    // guarantor requests exit
+
+    // guarantor exits
+
+    //
 
     /*///////////////////////////////////////////////////////////////
                             ADMIN ACTIONS
