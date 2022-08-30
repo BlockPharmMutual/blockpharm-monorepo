@@ -15,10 +15,6 @@ contract Certificate is ERC721 {
     error OnlyActuary();
 
     /* ====================================================================== //
-                                    EVENTS
-    // ====================================================================== */
-
-    /* ====================================================================== //
                                     STORAGE
     // ====================================================================== */
 
@@ -31,15 +27,13 @@ contract Certificate is ERC721 {
     }
 
     Actuary public actuary;
-    InsurancePool public insurancePool;
+    InsurancePool public pool;
     Adjuster public adjuster;
 
     uint256 public currentTokenId;
     mapping(uint256 => address) insuree;
     mapping(uint256 => uint256) premium;
     mapping(uint256 => uint256) escrowed;
-    mapping(uint256 => mapping(address => uint256)) guarantors;
-    mapping(uint256 => mapping(address => uint256)) guarantorExits;
     mapping(uint256 => uint256) totalExits;
     mapping(uint256 => uint256) startTime;
     mapping(uint256 => uint256) endTime;
@@ -57,12 +51,12 @@ contract Certificate is ERC721 {
         Adjuster _adjuster
     ) ERC721(_name, _symbol) {
         actuary = _actuary;
-        insurancePool = _insurancePool;
+        pool = _insurancePool;
         adjuster = _adjuster;
     }
 
     /* ====================================================================== //
-                                    MUTABLE ACTIONS
+                                    PROTOCOL ACTIONS
     /* ====================================================================== */
 
     function mintTo(
@@ -82,7 +76,6 @@ contract Certificate is ERC721 {
         endTime[newItemId] = _endTime;
         status[newItemId] = Status.INACTIVE;
         totalExits[newItemId] = 0;
-        guarantors[newItemId] = pool.balanceOf;
 
         _safeMint(recipient, newItemId);
         return newItemId;

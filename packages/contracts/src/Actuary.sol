@@ -94,16 +94,19 @@ contract Actuary is Owned {
         pool.escrow(_coverAmount);
 
         // Create the certificate
-        uint256 id = certificate.mintTo(
-            recipient,
-            _premium,
-            _escrowed,
+        uint256 certificateId = certificate.mintTo(
+            msg.sender,
+            quote,
+            _coverAmount,
             _startTime,
             _endTime
         );
 
+        // TODO: in test check snapshotId == certificateId
+        uint256 snapshotId = pool.snapshot();
+
         // Emit the event
-        emit InsurancePurchaced(id);
+        emit InsurancePurchaced(certificateId);
     }
 
     // insuree cancels certificate
