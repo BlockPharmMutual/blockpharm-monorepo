@@ -53,4 +53,10 @@ contract InsurancePool is VaultSnapshotable, Owned {
         if (msg.sender != address(actuary)) revert OnlyActuary();
         return _snapshot();
     }
+
+    /* ====================================================================== //
+                                    INTERNAL HOOKS
+    /* ====================================================================== */
+
+    function afterWithdraw() internal {}
 }

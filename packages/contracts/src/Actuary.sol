@@ -6,20 +6,18 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {InsurancePool} from "./InsurancePool.sol";
 import {Adjuster} from "./Adjuster.sol";
 import {Certificate} from "./Certificate.sol";
+import {Status} from "./lib/State.sol";
 
+// TODO: Split this contract up into escrow and Actuary
 contract Actuary is Owned {
     /*///////////////////////////////////////////////////////////////
                             ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    error CertificateNotInactive();
-    error CertificateActive();
-    error CertificateNotExpired();
-    error CertificateExpired();
-    error CertificateNotClaimed();
-    error CertificateClaimed();
-
     error NotOwner();
+    error InsufficentSnapshotBalance();
+    error NoEscrowClaim();
+    error InsuranceNotClaimable();
 
     /*///////////////////////////////////////////////////////////////
                             EVENTS
@@ -44,26 +42,30 @@ contract Actuary is Owned {
     );
     event InsuranceCanceled(uint256 id, uint256 EscrowedRefunded);
 
+    event LpRequestEscrow(
+        address indexed lp,
+        uint256 _amountToClaim,
+        uint256 _snapshotId
+    );
+
+    event LpClaimedEscrow(
+        address indexed lp,
+        uint256 _amountClaimed,
+        uint256 _snapshotId
+    );
     /*///////////////////////////////////////////////////////////////
                             STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The address of the admin
     address public admin;
-    /// @dev The insurance pool
     InsurancePool public pool;
-    /// @dev The adjuster
     Adjuster public adjuster;
-    /// @dev The certificate
     Certificate public certificate;
 
     // TODO: implement hook on Vault & Certificate such that when LP withdraws
-    /// @dev
     mapping(uint256 => mapping(address => uint256)) escorowClaims;
-    /// @dev total escorow claims for each certificate
     mapping(uint256 => uint256) totalEscrowedClaims;
 
-    /// @dev The payment token
     ERC20 public usd;
 
     /*///////////////////////////////////////////////////////////////
@@ -93,9 +95,9 @@ contract Actuary is Owned {
         return _coverAmount / 100;
     }
 
-    /*///////////////////////////////////////////////////////////////
-                            MUTABLE ACTIONS
-    //////////////////////////////////////////////////////////////*/
+    /* ====================================================================== //
+                                    INSUREE ACTIONS
+    /* ====================================================================== */
 
     function purchaseInsurance(
         uint256 _coverAmount,
@@ -117,9 +119,6 @@ contract Actuary is Owned {
             _endTime
         );
 
-        // 4. Set the status of the Insurance Certificate
-        certificate.setStatus(certificateId, Certificate.Status.INACTIVE);
-
         // TODO: in test check snapshotId == certificateId
         pool.snapshot();
 
@@ -137,26 +136,20 @@ contract Actuary is Owned {
     }
 
     // insuree cancels certificate
+    // TODO: implement lp withdraw logic
     function cancelInsurance(uint256 _certificateId) external {
         // 1. Check msg.sender is owner
         if (certificate.ownerOf(_certificateId) != msg.sender) {
             revert NotOwner();
         }
 
-        // 2. Check if the certificate is active
-        if (
-            certificate.getStatus(_certificateId) != Certificate.Status.INACTIVE
-        ) {
-            revert CertificateNotInactive();
-        }
+        // 2. Cancel Insurance Certificate
+        certificate.setCanceled(_certificateId);
 
-        // 3. Cancel Insurance Certificate
-        certificate.setStatus(_certificateId, Certificate.Status.CANCELED);
-
-        // 4. Repay escrow
+        // 3. Repay escrow
         usd.transfer(address(this), certificate.getEscrowed(_certificateId));
 
-        // 5. Emit the event
+        // 4. Emit the event
         emit InsuranceCanceled(
             _certificateId,
             certificate.getEscrowed(_certificateId)
@@ -164,12 +157,59 @@ contract Actuary is Owned {
     }
 
     // insuree claims against certificate
+    function claimInsurance(uint256 _certificateId) external {
+        // 1. Check msg.sender is owner
+        if (certificate.ownerOf(_certificateId) != msg.sender) {
+            revert NotOwner();
+        }
+        // 2. check insurance is claimable
+        if (!adjuster.insuranceClaimable(_certificateId)) {
+            revert InsuranceNotClaimable();
+        }
 
-    // guarantor requests exit
+        uint256 escrowed = certificate.getEscrowed(_certificateId);
 
-    // guarantor exits
+        // 3. Claim escrow
+        usd.transfer(address(this), escrowed);
 
-    //
+        // 4. Emit the event
+        emit InsuranceClaimed(_certificateId, escrowed);
+    }
+
+    /* ====================================================================== //
+                                    LP ACTIONS
+    /* ====================================================================== */
+
+    // TODO: Test if this is the correct way to do this.
+    // operate on balance and not shares
+    function lpRequestEscrow(uint256 _amountToClaim, uint256 _snapshotId)
+        external
+    {
+        uint256 balanceAtSnapshot = pool.balanceOfAt(msg.sender, _snapshotId);
+        uint256 balanceNow = pool.balanceOf(msg.sender);
+        if (_amountToClaim > balanceAtSnapshot - balanceNow) {
+            revert InsufficentSnapshotBalance();
+        }
+        // if so, claim
+        escorowClaims[_snapshotId][msg.sender] = _amountToClaim;
+        totalEscrowedClaims[_snapshotId] += _amountToClaim;
+        emit LpRequestEscrow(msg.sender, _amountToClaim, _snapshotId);
+    }
+
+    function lpClaimEscrow(uint256 _snapshotId) external {
+        uint256 amountToClaim = escorowClaims[_snapshotId][msg.sender];
+        if (amountToClaim == 0) {
+            revert NoEscrowClaim();
+        }
+        if (certificate.status(_snapshotId) != Status.EXPIRED) {
+            revert InsuranceNotClaimable();
+        }
+        // if so, claim
+        escorowClaims[_snapshotId][msg.sender] = 0;
+        totalEscrowedClaims[_snapshotId] -= amountToClaim;
+        usd.transfer(msg.sender, amountToClaim);
+        emit LpClaimedEscrow(msg.sender, amountToClaim, _snapshotId);
+    }
 
     /*///////////////////////////////////////////////////////////////
                             ADMIN ACTIONS

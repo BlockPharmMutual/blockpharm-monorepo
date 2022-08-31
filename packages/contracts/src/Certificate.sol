@@ -32,13 +32,12 @@ contract Certificate is ERC721 {
     Adjuster public adjuster;
 
     uint256 public currentTokenId;
-    mapping(uint256 => address) insuree;
-    mapping(uint256 => uint256) premium;
-    mapping(uint256 => uint256) escrowed;
-    mapping(uint256 => uint256) totalExits;
-    mapping(uint256 => uint256) startTime;
-    mapping(uint256 => uint256) endTime;
-    mapping(uint256 => Status) status;
+    mapping(uint256 => address) public insuree;
+    mapping(uint256 => uint256) public premium;
+    mapping(uint256 => uint256) public escrowed;
+    mapping(uint256 => uint256) public startTime;
+    mapping(uint256 => uint256) public endTime;
+    mapping(uint256 => Status) public status;
 
     /* ====================================================================== //
                                     CONSTRUCTOR
@@ -98,7 +97,6 @@ contract Certificate is ERC721 {
         startTime[newItemId] = _startTime;
         endTime[newItemId] = _endTime;
         status[newItemId] = Status.ACTIVE;
-        totalExits[newItemId] = 0;
 
         _safeMint(recipient, newItemId);
         setActive(newItemId);
