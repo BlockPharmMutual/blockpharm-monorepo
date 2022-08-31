@@ -10,18 +10,19 @@ import {Status} from "./lib/State.sol";
 
 // TODO: Split this contract up into escrow and Actuary
 contract Actuary is Owned {
-    /*///////////////////////////////////////////////////////////////
-                            ERRORS
-    //////////////////////////////////////////////////////////////*/
+    /* ====================================================================== //
+                                    ERRORS
+    /* ====================================================================== */
 
     error NotOwner();
     error InsufficentSnapshotBalance();
     error NoEscrowClaim();
     error InsuranceNotClaimable();
+    error InsuranceNotExpired();
 
-    /*///////////////////////////////////////////////////////////////
-                            EVENTS
-    //////////////////////////////////////////////////////////////*/
+    /* ====================================================================== //
+                                    EVENTS
+    /* ====================================================================== */
 
     event NewAdmin(address _previousAdmin, address _newAdmin);
     event NewInsurancePool(address _insurancePool);
@@ -41,36 +42,31 @@ contract Actuary is Owned {
         uint256 usdClaimableByExits
     );
     event InsuranceCanceled(uint256 id, uint256 EscrowedRefunded);
-
     event LpRequestEscrow(
         address indexed lp,
         uint256 _amountToClaim,
         uint256 _snapshotId
     );
-
     event LpClaimedEscrow(
         address indexed lp,
         uint256 _amountClaimed,
         uint256 _snapshotId
     );
-    /*///////////////////////////////////////////////////////////////
-                            STORAGE
-    //////////////////////////////////////////////////////////////*/
 
+    /* ====================================================================== //
+                                    STORAGE
+    /* ====================================================================== */
     address public admin;
     InsurancePool public pool;
     Adjuster public adjuster;
     Certificate public certificate;
-
-    // TODO: implement hook on Vault & Certificate such that when LP withdraws
+    ERC20 public usd;
     mapping(uint256 => mapping(address => uint256)) escorowClaims;
     mapping(uint256 => uint256) totalEscrowedClaims;
 
-    ERC20 public usd;
-
-    /*///////////////////////////////////////////////////////////////
-                            INITIALIZATION
-    //////////////////////////////////////////////////////////////*/
+    /* ====================================================================== //
+                                    CONSTRUCTOR
+    /* ====================================================================== */
 
     constructor(
         address _admin,
@@ -86,9 +82,9 @@ contract Actuary is Owned {
         usd = ERC20(_usd);
     }
 
-    /*///////////////////////////////////////////////////////////////
-                            VIEW ACTIONS
-    //////////////////////////////////////////////////////////////*/
+    /* ====================================================================== //
+                                    VIEW ACTIONS
+    /* ====================================================================== */
 
     function getQuote(uint256 _coverAmount) public pure returns (uint256) {
         // TESTING: 1% of cover amount
@@ -96,7 +92,7 @@ contract Actuary is Owned {
     }
 
     /* ====================================================================== //
-                                    INSUREE ACTIONS
+                                    MUTABLE ACTIONS
     /* ====================================================================== */
 
     function purchaseInsurance(
@@ -135,19 +131,19 @@ contract Actuary is Owned {
         );
     }
 
-    // insuree cancels certificate
-    // TODO: implement lp withdraw logic
     function cancelInsurance(uint256 _certificateId) external {
         // 1. Check msg.sender is owner
         if (certificate.ownerOf(_certificateId) != msg.sender) {
             revert NotOwner();
         }
 
+        // 3. Repay escrow
+        uint256 escrow = certificate.escrowed(_certificateId);
+        usd.approve(address(pool), escrow);
+        pool.refundEscrow(escrow);
+
         // 2. Cancel Insurance Certificate
         certificate.setCanceled(_certificateId);
-
-        // 3. Repay escrow
-        usd.transfer(address(this), certificate.getEscrowed(_certificateId));
 
         // 4. Emit the event
         emit InsuranceCanceled(
@@ -156,7 +152,6 @@ contract Actuary is Owned {
         );
     }
 
-    // insuree claims against certificate
     function claimInsurance(uint256 _certificateId) external {
         // 1. Check msg.sender is owner
         if (certificate.ownerOf(_certificateId) != msg.sender) {
@@ -176,12 +171,21 @@ contract Actuary is Owned {
         emit InsuranceClaimed(_certificateId, escrowed);
     }
 
-    /* ====================================================================== //
-                                    LP ACTIONS
-    /* ====================================================================== */
+    function expireInsurance(uint256 _certificateId) external {
+        uint256 endTime = certificate.endTime(_certificateId);
+        if (block.number < endTime) revert InsuranceNotExpired();
+        certificate.setExpired(_certificateId);
 
-    // TODO: Test if this is the correct way to do this.
-    // operate on balance and not shares
+        uint256 escrowed = certificate.getEscrowed(_certificateId);
+        uint256 totalClaims = totalEscrowedClaims[_certificateId];
+        uint256 refundable = escrowed - totalClaims;
+
+        usd.approve(address(pool), refundable);
+        pool.refundEscrow(refundable);
+
+        emit InsuranceExpired(_certificateId, refundable, totalClaims);
+    }
+
     function lpRequestEscrow(uint256 _amountToClaim, uint256 _snapshotId)
         external
     {
@@ -210,12 +214,4 @@ contract Actuary is Owned {
         usd.transfer(msg.sender, amountToClaim);
         emit LpClaimedEscrow(msg.sender, amountToClaim, _snapshotId);
     }
-
-    /*///////////////////////////////////////////////////////////////
-                            ADMIN ACTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /*///////////////////////////////////////////////////////////////
-                            INTERNAL LOGIC
-    //////////////////////////////////////////////////////////////*/
 }

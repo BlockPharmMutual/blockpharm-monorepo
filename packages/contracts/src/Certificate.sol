@@ -24,6 +24,15 @@ contract Certificate is ERC721 {
     error StartTimeInFuture();
 
     /* ====================================================================== //
+                                    EVENTS
+    // ====================================================================== */
+
+    event Activated(uint256 id);
+    event Claimed(uint256 id);
+    event Expired(uint256 id);
+    event Canceled(uint256 id);
+
+    /* ====================================================================== //
                                     STORAGE
     // ====================================================================== */
 
@@ -110,6 +119,8 @@ contract Certificate is ERC721 {
         if (_status == Status.EXPIRED) revert CertificateExpired();
         if (block.timestamp > startTime[_tokenId]) revert StartTimeInFuture();
         status[_tokenId] = Status.ACTIVE;
+
+        emit Activated(_tokenId);
     }
 
     function setClaimed(uint256 _tokenId) external {
@@ -118,6 +129,7 @@ contract Certificate is ERC721 {
         if (_status == Status.EXPIRED) revert CertificateExpired();
         if (_status == Status.CANCELED) revert CertificateCanceled();
         status[_tokenId] = Status.CLAIMED;
+        emit Claimed(_tokenId);
     }
 
     function setExpired(uint256 _tokenId) external {
@@ -127,6 +139,7 @@ contract Certificate is ERC721 {
         if (_status == Status.CANCELED) revert CertificateCanceled();
         if (block.timestamp < endTime[_tokenId]) revert CertificateNotExpired();
         status[_tokenId] = Status.EXPIRED;
+        emit Expired(_tokenId);
     }
 
     function setCanceled(uint256 _tokenId) external {
@@ -136,5 +149,6 @@ contract Certificate is ERC721 {
         if (_status == Status.EXPIRED) revert CertificateExpired();
         if (block.timestamp > startTime[_tokenId]) revert CertificateActive();
         status[_tokenId] = Status.CANCELED;
+        emit Canceled(_tokenId);
     }
 }

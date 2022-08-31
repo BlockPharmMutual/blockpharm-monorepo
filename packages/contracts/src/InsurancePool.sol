@@ -20,6 +20,9 @@ contract InsurancePool is VaultSnapshotable, Owned {
                                     EVENTS
     // ====================================================================== */
 
+    event Escrow(uint256 amount);
+    event RefundEscrow(uint256 amount);
+
     /* ====================================================================== //
                                     STORAGE
     // ====================================================================== */
@@ -46,7 +49,16 @@ contract InsurancePool is VaultSnapshotable, Owned {
 
     function escrow(uint256 _amount) external {
         if (msg.sender != address(actuary)) revert OnlyActuary();
-        asset.transferFrom(msg.sender, address(this), _amount);
+        asset.transfer(address(actuary), _amount);
+
+        emit Escrow(_amount);
+    }
+
+    function refundEscrow(uint256 _amount) external {
+        if (msg.sender != address(actuary)) revert OnlyActuary();
+        asset.transferFrom(address(actuary), address(this), _amount);
+
+        emit RefundEscrow(_amount);
     }
 
     function snapshot() external returns (uint256) {
