@@ -7,6 +7,8 @@ import {Actuary} from "./Actuary.sol";
 import {InsurancePool} from "./InsurancePool.sol";
 import {Adjuster} from "./Adjuster.sol";
 
+import {Status} from "./lib/State.sol";
+
 contract Certificate is ERC721 {
     /* ====================================================================== //
                                     ERRORS
@@ -18,18 +20,12 @@ contract Certificate is ERC721 {
     error CertificateExpired();
     error CertificateNotClaimed();
     error CertificateClaimed();
+    error CertificateCanceled();
     error StartTimeInFuture();
 
     /* ====================================================================== //
                                     STORAGE
     // ====================================================================== */
-
-    enum Status {
-        ACTIVE,
-        CLAIMED,
-        EXPIRED,
-        CANCELED
-    }
 
     Actuary public actuary;
     InsurancePool public pool;
@@ -101,11 +97,11 @@ contract Certificate is ERC721 {
         escrowed[newItemId] = _escrowed;
         startTime[newItemId] = _startTime;
         endTime[newItemId] = _endTime;
-        status[newItemId] = Status.INACTIVE;
+        status[newItemId] = Status.ACTIVE;
         totalExits[newItemId] = 0;
 
         _safeMint(recipient, newItemId);
-        setActive(_tokenId);
+        setActive(newItemId);
         return newItemId;
     }
 
