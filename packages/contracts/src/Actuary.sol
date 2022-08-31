@@ -68,14 +68,14 @@ contract Actuary is Owned {
                                     CONSTRUCTOR
     /* ====================================================================== */
 
-    constructor(
-        address _admin,
+    constructor(address _admin) Owned(_admin) {}
+
+    function init(
         address _pool,
         address _adjuster,
         address _certificate,
         address _usd
-    ) Owned(_admin) {
-        admin = _admin;
+    ) external onlyOwner {
         pool = InsurancePool(_pool);
         adjuster = Adjuster(_adjuster);
         certificate = Certificate(_certificate);

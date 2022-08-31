@@ -35,11 +35,12 @@ contract InsurancePool is VaultSnapshotable, Owned {
 
     constructor(
         address _owner,
-        Actuary _actuary,
         ERC20 _asset,
         string memory _name,
         string memory _symbol
-    ) Owned(_owner) VaultSnapshotable(_asset, _name, _symbol) {
+    ) Owned(_owner) VaultSnapshotable(_asset, _name, _symbol) {}
+
+    function init(Actuary _actuary) external onlyOwner {
         actuary = _actuary;
     }
 
