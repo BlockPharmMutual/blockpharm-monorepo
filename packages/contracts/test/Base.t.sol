@@ -24,7 +24,7 @@ contract BaseTest is Test {
     MockUSD public usd;
 
     // Constants
-    uint256 public constant HUNDRED_K = 100_000 * 10 * 18;
+    uint256 public constant HUNDRED_K = 100_000 * 10**18;
     address[] to = [alice, bob, lp1, lp2];
 
     function setUp() public {
