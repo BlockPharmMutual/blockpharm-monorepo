@@ -13,13 +13,18 @@ contract Certificate is ERC721 {
     // ====================================================================== */
 
     error OnlyActuary();
+    error CertificateActive();
+    error CertificateNotExpired();
+    error CertificateExpired();
+    error CertificateNotClaimed();
+    error CertificateClaimed();
+    error StartTimeInFuture();
 
     /* ====================================================================== //
                                     STORAGE
     // ====================================================================== */
 
     enum Status {
-        INACTIVE,
         ACTIVE,
         CLAIMED,
         EXPIRED,
@@ -100,12 +105,42 @@ contract Certificate is ERC721 {
         totalExits[newItemId] = 0;
 
         _safeMint(recipient, newItemId);
+        setActive(_tokenId);
         return newItemId;
     }
 
-    function setStatus(uint256 _tokenId, Status _status) external {
+    function setActive(uint256 _tokenId) internal {
         if (msg.sender != address(actuary)) revert OnlyActuary();
-        // TODO: perform checks
-        status[_tokenId] = _status;
+        Status _status = getStatus(_tokenId);
+        if (_status == Status.CLAIMED) revert CertificateClaimed();
+        if (_status == Status.EXPIRED) revert CertificateExpired();
+        if (block.timestamp > startTime[_tokenId]) revert StartTimeInFuture();
+        status[_tokenId] = Status.ACTIVE;
+    }
+
+    function setClaimed(uint256 _tokenId) external {
+        if (msg.sender != address(actuary)) revert OnlyActuary();
+        Status _status = getStatus(_tokenId);
+        if (_status == Status.EXPIRED) revert CertificateExpired();
+        if (_status == Status.CANCELED) revert CertificateCanceled();
+        status[_tokenId] = Status.CLAIMED;
+    }
+
+    function setExpired(uint256 _tokenId) external {
+        if (msg.sender != address(actuary)) revert OnlyActuary();
+        Status _status = getStatus(_tokenId);
+        if (_status == Status.CLAIMED) revert CertificateClaimed();
+        if (_status == Status.CANCELED) revert CertificateCanceled();
+        if (block.timestamp < endTime[_tokenId]) revert CertificateNotExpired();
+        status[_tokenId] = Status.EXPIRED;
+    }
+
+    function setCanceled(uint256 _tokenId) external {
+        if (msg.sender != address(actuary)) revert OnlyActuary();
+        Status _status = getStatus(_tokenId);
+        if (_status == Status.CLAIMED) revert CertificateClaimed();
+        if (_status == Status.EXPIRED) revert CertificateExpired();
+        if (block.timestamp > startTime[_tokenId]) revert CertificateActive();
+        status[_tokenId] = Status.CANCELED;
     }
 }
