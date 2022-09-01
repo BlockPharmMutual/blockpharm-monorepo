@@ -52,13 +52,15 @@ contract Certificate is ERC721 {
                                     CONSTRUCTOR
     // ====================================================================== */
 
-    constructor(
-        string memory _name,
-        string memory _symbol,
+    constructor(string memory _name, string memory _symbol)
+        ERC721(_name, _symbol)
+    {}
+
+    function init(
         Actuary _actuary,
         InsurancePool _insurancePool,
         Adjuster _adjuster
-    ) ERC721(_name, _symbol) {
+    ) external {
         actuary = _actuary;
         pool = _insurancePool;
         adjuster = _adjuster;
