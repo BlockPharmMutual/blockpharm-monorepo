@@ -13,6 +13,9 @@ contract DeployGoerli is Script {
     // Constants
     uint256 public constant HUNDRED_K = 100_000 * 10**18;
 
+    // Logs
+    event log_named_address(string key, address val);
+
     // Contracts
     Actuary public actuary;
     Adjuster public adjuster;
@@ -21,7 +24,7 @@ contract DeployGoerli is Script {
     MockUSD public usd;
 
     function run() public {
-        vm.broadcast();
+        vm.startBroadcast();
 
         // create contracts
         usd = new MockUSD();
@@ -29,6 +32,22 @@ contract DeployGoerli is Script {
         adjuster = new Adjuster();
         pool = new InsurancePool(address(this), usd, "PoolOne", "POOL1");
         certificate = new Certificate("Insurance Certificate", "CERT");
+
+        emit log_named_address("usd", address(usd));
+        emit log_named_address("actuary", address(actuary));
+        emit log_named_address("adjuster", address(adjuster));
+        emit log_named_address("pool", address(pool));
+        emit log_named_address("certificate", address(certificate));
+
+        // set up contracts
+        actuary.init(
+            address(pool),
+            address(adjuster),
+            address(certificate),
+            address(usd)
+        );
+        pool.init(actuary);
+        certificate.init(actuary, pool, adjuster);
 
         vm.stopBroadcast();
     }

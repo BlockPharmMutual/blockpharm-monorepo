@@ -40,7 +40,8 @@ contract InsurancePool is VaultSnapshotable, Owned {
         string memory _symbol
     ) Owned(_owner) VaultSnapshotable(_asset, _name, _symbol) {}
 
-    function init(Actuary _actuary) external onlyOwner {
+    // TODO: Make onlyOwner
+    function init(Actuary _actuary) external {
         actuary = _actuary;
     }
 
